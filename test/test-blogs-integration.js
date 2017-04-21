@@ -147,8 +147,6 @@ describe('Blog API resource', function () {
         .then(function(blogpost) {
           updateData.id = blogpost.id;
           console.log(blogpost.id);
-          make request then inspect it to make sure it reflects
-          data we sent
           return chai.request(app)
             .put(`/posts/${blogpost.id}`)
             .send(updateData);
@@ -183,10 +181,7 @@ describe('Blog API resource', function () {
           return BlogPost.findById(blogpost.id).exec();
         })
         .then(function(_blogpost) {
-          // when a variable's value is null, chaining `should`
-          // doesn't work. so `_restaurant.should.be.null` would raise
-          // an error. `should.be.null(_restaurant)` is how we can
-          // make assertions about a null value.
+        .
           should.not.exist(_blogpost);
         });
     });
