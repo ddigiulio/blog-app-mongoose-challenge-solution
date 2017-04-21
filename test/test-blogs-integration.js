@@ -1,13 +1,12 @@
 const chai = require('chai');
 const chaiHttp = require('chai-http');
-
 const mongoose = require('mongoose');
 
 const should = chai.should();
 
-const {BlogPost} = require('../models');
-const {app, runServer, closeServer} = require('../server');
-const {TEST_DATABASE_URL} = require('../config');
+const { BlogPost } = require('../models');
+const { app, runServer, closeServer } = require('../server');
+const { TEST_DATABASE_URL } = require('../config');
 
 chai.use(chaiHttp);
 
@@ -17,59 +16,181 @@ function seedBlogData() {
     let command = 'mongoimport --db test-blog-app --collection blogposts --drop --file seed-data.json'
     exec(command, (err, stdout, stderr) => {
         // check for errors or if it was succesfuly
-        console.log("?");
     })
 }
 
-describe('Blog API resource', function() {
+function generateBlogData() {
+    return {
+        author: {
+            firstName: "Danny",
+            lastName: "Di Giulio"
+        },
+        content: "hi",
+        title: "I AM THE BEST",
+    }
+}
 
-  // we need each of these hook functions to return a promise
-  // otherwise we'd need to call a `done` callback. `runServer`,
-  // `seedRestaurantData` and `tearDownDb` each return a promise,
-  // so we return the value returned by these function calls.
-  before(function() {
-    return runServer(TEST_DATABASE_URL);
-  });
+function tearDownDb() {
+    console.warn('Deleting database');
+    return mongoose.connection.dropDatabase();
+}
 
-  beforeEach(function() {
-    return seedBlogData();
-  });
+describe('Blog API resource', function () {
 
-//   afterEach(function() {
-//     return tearDownDb();
-//   });
+    // we need each of these hook functions to return a promise
+    // otherwise we'd need to call a `done` callback. `runServer`,
+    // `seedRestaurantData` and `tearDownDb` each return a promise,
+    // so we return the value returned by these function calls.
+    before(function () {
+        return runServer(TEST_DATABASE_URL);
+    });
 
-  after(function() {
-    return closeServer();
-  })
+    beforeEach(function () {
+        return seedBlogData();
+    });
 
-describe('GET endpoint', function() {
+    afterEach(function () {
+        return tearDownDb();
+    });
 
-    it('should return all existing blogs', function() {
-      // strategy:
-      //    1. get back all restaurants returned by by GET request to `/restaurants`
-      //    2. prove res has right status, data type
-      //    3. prove the number of restaurants we got back is equal to number
-      //       in db.
-      //
-      // need to have access to mutate and access `res` across
-      // `.then()` calls below, so declare it here so can modify in place
-      let res;
-      return chai.request(app)
-        .get('/posts')
-        .then(function(_res) {
-          // so subsequent .then blocks can access resp obj.
-          res = _res;
-          res.should.have.status(200);
-          // otherwise our db seeding didn't work
-          res.body.restaurants.should.have.length.of.at.least(1);
-          return BlogPost.count();
-        })
-        .then(function(count) {
-          res.body.restaurants.should.have.length.of(count);
+    after(function () {
+        return closeServer();
+    })
+
+    describe('GET endpoint', function () {
+
+        it('should return all existing blogs', function () {
+
+            let res;
+            return chai.request(app)
+                .get('/posts')
+                .then(function (_res) {
+                    res = _res;
+                    res.should.have.status(200);
+                    res.body.posts.should.have.length.of.at.least(1);
+                    return BlogPost.count();
+                })
+                .then(function (count) {
+                    res.body.posts.should.have.length.of(count);
+                });
+        });
+
+        it('should return blogs with right fields', function () {
+            console.log("checking for fields");
+            let resBlogPost;
+            return chai.request(app)
+                .get('/posts')
+                .then(function (res) {
+                    res.should.have.status(200);
+                    res.should.be.json;
+                    res.body.posts.should.be.a('array');
+                    res.body.posts.should.have.length.of.at.least(1);
+
+                    res.body.posts.forEach(function (blogpost) {
+                        blogpost.should.be.a('object');
+                        blogpost.should.include.keys(
+                            'author', 'title', 'content')
+                    });
+                    resBlogPost = res.body.posts[0];
+                    return BlogPost.findById(resBlogPost.id);
+                })
+                .then(function(blogpost){
+                    blogpost = blogpost.apiRepr();
+                    resBlogPost.author.should.equal(blogpost.author);
+                    resBlogPost.title.should.equal(blogpost.title);
+                    resBlogPost.content.should.equal(blogpost.content);
+
+                });
+        });
+
+    });
+
+    describe('POST endpoint', function () {
+        it('should add a new blogpost', function () {
+
+            const newBlogPost = generateBlogData();
+
+            return chai.request(app)
+                .post('/posts')
+                .send(newBlogPost)
+                .then(function (res) {
+                    res.should.have.status(201);
+                    res.should.be.json;
+                    res.body.should.be.a('object');
+                    res.body.should.include.keys(
+                        'title', 'author', 'content');
+                    res.body.id.should.not.be.null;
+                    res.body.title.should.equal(newBlogPost.title);
+                    res.body.content.should.equal(newBlogPost.content);
+
+                       return BlogPost.findById(res.body.id);
+                })
+            .then(function(blogpost) {
+              blogpost.content.should.equal(newBlogPost.content);
+              blogpost.title.should.equal(newBlogPost.title);
+            
+            });
         });
     });
 
+    describe('PUT endpoint', function() {
+
+    it('should update fields you send over', function() {
+      const updateData = {
+        title: 'Dr. DooLittle',
+        content: 'a great book'
+      };
+
+      return BlogPost
+        .findOne()
+        .exec()
+        .then(function(blogpost) {
+          updateData.id = blogpost.id;
+          console.log(blogpost.id);
+          make request then inspect it to make sure it reflects
+          data we sent
+          return chai.request(app)
+            .put(`/posts/${blogpost.id}`)
+            .send(updateData);
+        })
+        .then(function(res) {
+          res.should.have.status(204);
+
+          return BlogPost.findById(updateData.id).exec();
+        })
+        .then(function(blogpost) {
+         blogpost.content.should.equal(updateData.content);
+          blogpost.title.should.equal(updateData.title);
+        });
+      });
   });
+
+    describe('DELETE endpoint', function() {
+    
+    it('delete a blogpost by id', function() {
+
+      let blogpost;
+
+      return BlogPost
+        .findOne()
+        .exec()
+        .then(function(_blogpost) {
+          blogpost = _blogpost;
+          return chai.request(app).delete(`/posts/${blogpost.id}`);
+        })
+        .then(function(res) {
+          res.should.have.status(204);
+          return BlogPost.findById(blogpost.id).exec();
+        })
+        .then(function(_blogpost) {
+          // when a variable's value is null, chaining `should`
+          // doesn't work. so `_restaurant.should.be.null` would raise
+          // an error. `should.be.null(_restaurant)` is how we can
+          // make assertions about a null value.
+          should.not.exist(_blogpost);
+        });
+    });
+  });
+
 
 })
