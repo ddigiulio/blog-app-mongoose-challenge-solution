@@ -10,11 +10,12 @@ const { TEST_DATABASE_URL } = require('../config');
 
 chai.use(chaiHttp);
 
-function seedBlogData() {
+function seedBlogData(done) {
     console.info('seeding blog data');
     let exec = require('child_process').exec
     let command = 'mongoimport --db test-blog-app --collection blogposts --drop --file seed-data.json'
     exec(command, (err, stdout, stderr) => {
+        done();
         // check for errors or if it was succesfuly
     })
 }
@@ -41,20 +42,23 @@ describe('Blog API resource', function () {
     // otherwise we'd need to call a `done` callback. `runServer`,
     // `seedRestaurantData` and `tearDownDb` each return a promise,
     // so we return the value returned by these function calls.
-    before(function () {
-        return runServer(TEST_DATABASE_URL);
+    before((done) => {
+        runServer(TEST_DATABASE_URL)
+            .then(done);
     });
 
-    beforeEach(function () {
-        return seedBlogData();
+    beforeEach((done) => {
+        return seedBlogData(done);
     });
 
-    afterEach(function () {
-        return tearDownDb();
+    afterEach((done) => {
+        tearDownDb()
+            .then(done)
     });
 
-    after(function () {
-        return closeServer();
+    after((done) => {
+        closeServer()
+            .then(done);
     })
 
     describe('GET endpoint', function () {
@@ -152,7 +156,7 @@ describe('Blog API resource', function () {
             .send(updateData);
         })
         .then(function(res) {
-          res.should.have.status(204);
+          res.should.have.status(201);
 
           return BlogPost.findById(updateData.id).exec();
         })
@@ -181,7 +185,7 @@ describe('Blog API resource', function () {
           return BlogPost.findById(blogpost.id).exec();
         })
         .then(function(_blogpost) {
-        .
+        
           should.not.exist(_blogpost);
         });
     });
